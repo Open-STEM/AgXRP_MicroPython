@@ -1,0 +1,92 @@
+{
+  "use_random_data": false,
+
+  "sensor_kit": {
+    "bus0_enabled": true,
+    "bus1_enabled": true,
+    "i2c_freq": 100000
+  },
+
+  "sensors": {
+    "co2": {
+      "enabled": true,
+      "bus": 0
+    },
+    "spectral": {
+      "enabled": false,
+      "bus": 0
+    },
+    "light": {
+      "enabled": true,
+      "bus": 0
+    },
+    "soil": [
+      {
+        "enabled": true,
+        "type": "capacitive",
+        "sensor_index": 1,
+        "bus": 1,
+        "address": "0x37"
+      },
+      {
+        "enabled": false,
+        "type": "capacitive",
+        "sensor_index": 2,
+        "bus": 0,
+        "address": "0x37"
+      }
+    ],
+    "screen": {
+      "enabled": true,
+      "bus": 0
+    },
+    "csv_logger": {
+      "enabled": false,
+      "filename": "sensor_log.csv",
+      "period_ms": 5000
+    }
+  },
+
+  "controller": {
+    "enabled": true,
+    "pumps": [
+      {
+        "enabled": true,
+        "pump_index": 1,
+        "csv_filename": "water_pump_1_log.csv"
+      },
+      {
+        "enabled": true,
+        "pump_index": 2,
+        "csv_filename": "water_pump_2_log.csv"
+      }
+    ],
+    "plant_systems": [
+      {
+        "enabled": true,
+        "sensor_index": 1,
+        "pump_index": 1,
+        "interval_hours": 0.5,
+        "threshold": 300.0,
+        "duration_seconds": 3.0
+      },
+      {
+        "enabled": true,
+        "sensor_index": 2,
+        "pump_index": 2,
+        "interval_hours": 0.5,
+        "threshold": 300.0,
+        "duration_seconds": 3.0
+      }
+    ]
+  },
+
+  "webserver": {
+    "access_point": {
+      "ssid": "AgXRP_SensorKit",
+      "password": "sensor123"
+    }
+  },
+
+  "sensor_update_interval_seconds": 2
+}
