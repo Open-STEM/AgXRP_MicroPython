@@ -96,7 +96,8 @@ def setup_controller(agxrp, cfg):
             interval_hours=ps_cfg.get("interval_hours", ps_cfg.get("interval_minutes", 30.0) / 60.0),
             threshold=ps_cfg["threshold"],
             duration_seconds=ps_cfg["duration_seconds"],
-            enabled=ps_cfg.get("enabled", True)
+            enabled=ps_cfg.get("enabled", True),
+            pump_effort=ps_cfg.get("pump_effort", 1.0)
         )
 
     controller.start_control_loop()

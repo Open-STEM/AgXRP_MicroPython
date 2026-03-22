@@ -68,7 +68,8 @@
         "pump_index": 1,
         "interval_hours": 0.5,
         "threshold": 300.0,
-        "duration_seconds": 3.0
+        "duration_seconds": 3.0,
+        "pump_effort": 1.0
       },
       {
         "enabled": true,
@@ -76,7 +77,8 @@
         "pump_index": 2,
         "interval_hours": 0.5,
         "threshold": 300.0,
-        "duration_seconds": 3.0
+        "duration_seconds": 3.0,
+        "pump_effort": 1.0
       }
     ]
   },

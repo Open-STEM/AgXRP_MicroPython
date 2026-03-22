@@ -76,9 +76,10 @@ class AgXRPController:
         """
         return self._water_pumps.get(pump_index)
     
-    def register_plant_system(self, sensor_index: int, pump_index: int, 
-                             interval_hours: float, threshold: float, 
-                             duration_seconds: float, enabled: bool = True):
+    def register_plant_system(self, sensor_index: int, pump_index: int,
+                             interval_hours: float, threshold: float,
+                             duration_seconds: float, enabled: bool = True,
+                             pump_effort: float = 1.0):
         """!
         Register a plant system (sensor + pump pair) for automatic control.
         
@@ -119,6 +120,7 @@ class AgXRPController:
             "interval_hours": interval_hours,
             "threshold": threshold,
             "duration_seconds": duration_seconds,
+            "pump_effort": max(-1.0, min(1.0, float(pump_effort))),
             "enabled": enabled,
             "last_check_time": time.time()
         }
@@ -154,6 +156,8 @@ class AgXRPController:
             system["threshold"] = float(kwargs["threshold"])
         if "duration_seconds" in kwargs:
             system["duration_seconds"] = float(kwargs["duration_seconds"])
+        if "pump_effort" in kwargs:
+            system["pump_effort"] = max(-1.0, min(1.0, float(kwargs["pump_effort"])))
         if "enabled" in kwargs:
             system["enabled"] = bool(kwargs["enabled"])
         
@@ -226,7 +230,7 @@ class AgXRPController:
                                 if pump:
                                     # Activate pump with logging
                                     pump.set_pump_effort(
-                                        effort=1,
+                                        effort=system.get("pump_effort", 1.0),
                                         time_ms=int(system["duration_seconds"] * 1000),
                                         log=True,
                                         soil_moisture=moisture

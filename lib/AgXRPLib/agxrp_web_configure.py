@@ -224,6 +224,7 @@ class AgXRPWebConfigure:
                 "interval_hours": self._form_float(form, "ps_{}_interval_hours".format(i), 0.5),
                 "threshold": self._form_float(form, "ps_{}_threshold".format(i), 300.0),
                 "duration_seconds": self._form_float(form, "ps_{}_duration_seconds".format(i), 3.0),
+                "pump_effort": self._form_float(form, "ps_{}_pump_effort".format(i), 1.0),
             })
         controller["plant_systems"] = ps_list
 
@@ -528,7 +529,8 @@ class AgXRPWebConfigure:
         for i in range(max(len(ps), 1)):
             entry = ps[i] if i < len(ps) else {
                 "enabled": False, "sensor_index": 1, "pump_index": 1,
-                "interval_hours": 0.5, "threshold": 300.0, "duration_seconds": 3.0
+                "interval_hours": 0.5, "threshold": 300.0, "duration_seconds": 3.0,
+                "pump_effort": 1.0
             }
             prefix = "ps_{}".format(i)
             h += '<div class="sub-section"><h3>Plant System {}</h3>\n'.format(i + 1)
@@ -549,6 +551,10 @@ class AgXRPWebConfigure:
             h += self._number_field("{}_duration_seconds".format(prefix),
                                     "Duration (seconds)",
                                     entry.get("duration_seconds", 3.0))
+            h += self._number_field("{}_pump_effort".format(prefix),
+                                    "Pump Effort (-1.0 to 1.0)",
+                                    entry.get("pump_effort", 1.0),
+                                    step="0.1", min_val="-1.0", max_val="1.0")
             h += '</div>\n'
         h += '</div>\n'
         return h
@@ -622,13 +628,15 @@ class AgXRPWebConfigure:
         ).format(label=label, name=name, val=current_value)
 
     @staticmethod
-    def _number_field(name, label, current_value, step=None, min_val=None):
+    def _number_field(name, label, current_value, step=None, min_val=None, max_val=None):
         """Render a number input."""
         attrs = ''
         if step is not None:
             attrs += ' step="{}"'.format(step)
         if min_val is not None:
             attrs += ' min="{}"'.format(min_val)
+        if max_val is not None:
+            attrs += ' max="{}"'.format(max_val)
         return (
             '<div class="field"><label>{label}</label>'
             '<input type="number" name="{name}" value="{val}"{attrs}></div>\n'
