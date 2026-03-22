@@ -18,7 +18,7 @@ class AgXRPWaterPump:
     Each instance controls a single pump. Create separate instances for left and right pumps.
     """
     
-    def __init__(self, index: int=1, csv_filename: str="water_pump_log.csv"):
+    def __init__(self, index: int=1, csv_filename: str="water_pump_log.csv", max_duration_seconds: float=60.0):
         """!
         Initialize the water pump with a specific motor index.
         
@@ -31,6 +31,7 @@ class AgXRPWaterPump:
         self._timer = Timer(-1)  # Virtual timer for time-based control
         self._current_effort = 0.0
         self._csv_filename = csv_filename
+        self._max_duration_ms = int(max_duration_seconds * 1000)
         # MicroPython on RP2040 (such as RP2350) may not have os.path.exists.
         # Instead, try opening the file to see if it exists.
         self._header_written = False
@@ -66,7 +67,7 @@ class AgXRPWaterPump:
         
         try:
             with open(self._csv_filename, 'w') as f:
-                f.write('datetime,revolutions,duration_seconds, soil_moisture\n')
+                f.write('datetime,revolutions,duration_seconds,soil_moisture\n')
             self._header_written = True
         except Exception as e:
             print(f"Error writing CSV header: {e}")
@@ -123,6 +124,10 @@ class AgXRPWaterPump:
         
         # If time_ms is 0, run indefinitely (no timer)
         if time_ms > 0:
+            # Clamp to safety maximum
+            if self._max_duration_ms > 0 and time_ms > self._max_duration_ms:
+                print(f"WARNING: Requested duration {time_ms}ms exceeds max {self._max_duration_ms}ms — clamping")
+                time_ms = self._max_duration_ms
             # Record start time for logging
             start_time = time.time()
             
@@ -189,7 +194,7 @@ class AgXRPWaterPump:
         direction = 1 if revolutions >= 0 else -1
         target_revolutions = abs(revolutions)
         
-        # Calculate target motor revolutions accounting for gear ratio (26:3)
+        # Calculate target motor revolutions accounting for gear ratio (26:12)
         # Motor must turn 26/12 times for each pump revolution
         gear_ratio = 26.0 / 12.0
         target_motor_revolutions = target_revolutions * gear_ratio

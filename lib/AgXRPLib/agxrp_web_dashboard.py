@@ -42,6 +42,8 @@ class AgXRPWebDashboard:
         self._light_intensity_registered = False
         self._soil_moisture_1_registered = False
         self._soil_moisture_2_registered = False
+        self._soil_moisture_1_unit = "%"   # "%" for resistive, "pF" for capacitive
+        self._soil_moisture_2_unit = "%"
 
         # Sensor data storage
         self._sensor_data = {}
@@ -149,35 +151,39 @@ class AgXRPWebDashboard:
             self._sensor_data["light_intensity"] = None
         return True
 
-    def register_soil_moisture_sensor_1(self):
+    def register_soil_moisture_sensor_1(self, sensor_type="resistive"):
         """!
         Register first soil moisture sensor for display.
 
+        @param sensor_type: "capacitive" (returns pF) or "resistive" (returns %)
         @return **bool** True if registration was successful
         """
         self._soil_moisture_1_registered = True
+        self._soil_moisture_1_unit = "pF" if sensor_type == "capacitive" else "%"
         if "soil_moisture_1" not in self._sensor_data:
             self._sensor_data["soil_moisture_1"] = None
         return True
 
-    def register_soil_moisture_sensor_2(self):
+    def register_soil_moisture_sensor_2(self, sensor_type="resistive"):
         """!
         Register second soil moisture sensor for display.
 
+        @param sensor_type: "capacitive" (returns pF) or "resistive" (returns %)
         @return **bool** True if registration was successful
         """
         self._soil_moisture_2_registered = True
+        self._soil_moisture_2_unit = "pF" if sensor_type == "capacitive" else "%"
         if "soil_moisture_2" not in self._sensor_data:
             self._sensor_data["soil_moisture_2"] = None
         return True
 
-    def register_soil_moisture(self):
+    def register_soil_moisture(self, sensor_type="resistive"):
         """!
         Register soil moisture sensor for display (backward compatibility).
 
         @return **bool** True if registration was successful
         """
-        return self.register_soil_moisture_sensor_1()
+        return self.register_soil_moisture_sensor_1(sensor_type=sensor_type)
 
     def register_controller(self, controller):
         """!
@@ -245,6 +251,14 @@ class AgXRPWebDashboard:
             print(f"Error starting access point: {e}")
             return False
 
+    def _soil_unit_for_sensor(self, sensor_index):
+        """Return the display unit for a given soil sensor index."""
+        if sensor_index == 1:
+            return self._soil_moisture_1_unit
+        if sensor_index == 2:
+            return self._soil_moisture_2_unit
+        return "%"
+
     def _save_plant_system_to_config(self, sensor_index, pump_index, update_data):
         """!
         Save updated plant system settings to config.json.
@@ -263,8 +277,11 @@ class AgXRPWebDashboard:
                         ps[key] = value
                     break
 
-            with open(self._config_path, "w") as f:
+            import os
+            tmp_path = self._config_path + ".tmp"
+            with open(tmp_path, "w") as f:
                 json.dump(cfg, f)
+            os.rename(tmp_path, self._config_path)
 
             print(f"Config saved for plant system: Sensor {sensor_index} -> Pump {pump_index}")
         except Exception as e:
@@ -439,6 +456,14 @@ class AgXRPWebDashboard:
                 else:
                     return (json.dumps({"status": "error", "message": "No data provided"}), 400, "application/json")
 
+                # Validate bounds
+                if "interval_hours" in update_data and update_data["interval_hours"] < 0.01:
+                    return (json.dumps({"status": "error", "message": "interval_hours must be >= 0.01"}), 400, "application/json")
+                if "threshold" in update_data and update_data["threshold"] < 0:
+                    return (json.dumps({"status": "error", "message": "threshold must be >= 0"}), 400, "application/json")
+                if "duration_seconds" in update_data and not (0.1 <= update_data["duration_seconds"] <= 300):
+                    return (json.dumps({"status": "error", "message": "duration_seconds must be between 0.1 and 300"}), 400, "application/json")
+
                 if self._controller.update_plant_system(sensor_index, pump_index, **update_data):
                     self._save_plant_system_to_config(sensor_index, pump_index, update_data)
                     return (json.dumps({"status": "success", "message": "Plant system updated"}), 200, "application/json")
@@ -564,6 +589,9 @@ class AgXRPWebDashboard:
 
         if "soil_moisture_2" in data_dict and self._soil_moisture_2_registered:
             self._sensor_data["soil_moisture_2"] = data_dict["soil_moisture_2"]
+
+        import time
+        self._sensor_data["_last_updated"] = time.ticks_ms()
 
     def _generate_random_data(self):
         """!
@@ -815,18 +843,24 @@ class AgXRPWebDashboard:
 
         if self._soil_moisture_1_registered:
             value = self._sensor_data.get("soil_moisture_1")
-            display_value = f"{value:.1f}%" if value is not None else "<span class='no-data'>No data</span>"
+            unit = self._soil_moisture_1_unit
+            display_value = f"{value:.1f} {unit}" if value is not None else "<span class='no-data'>No data</span>"
             html += f'        <div class="sensor-item"><span class="sensor-label">Soil Moisture 1:</span><span class="sensor-value" data-sensor="soil_moisture_1">{display_value}</span></div>\n'
             sensor_count += 1
 
         if self._soil_moisture_2_registered:
             value = self._sensor_data.get("soil_moisture_2")
-            display_value = f"{value:.1f}%" if value is not None else "<span class='no-data'>No data</span>"
+            unit = self._soil_moisture_2_unit
+            display_value = f"{value:.1f} {unit}" if value is not None else "<span class='no-data'>No data</span>"
             html += f'        <div class="sensor-item"><span class="sensor-label">Soil Moisture 2:</span><span class="sensor-value" data-sensor="soil_moisture_2">{display_value}</span></div>\n'
             sensor_count += 1
 
         if sensor_count == 0:
             html += '        <div class="sensor-item"><span class="no-data">No sensors registered</span></div>\n'
+
+        html += '        <div class="sensor-item" style="border-top:1px solid #eee;margin-top:4px;padding-top:6px;">'
+        html += '<span class="sensor-label" style="color:#999;font-size:0.85em;">Last updated:</span>'
+        html += '<span class="sensor-value" id="last-updated-label" style="color:#999;font-size:0.85em;">-</span></div>\n'
 
         html += """    </div>
 """
@@ -883,9 +917,9 @@ class AgXRPWebDashboard:
                            value="{system_data['interval_hours']:.2f}" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="threshold-{sensor_index}-{pump_index}">Soil Moisture Threshold (%):</label>
+                    <label class="form-label" for="threshold-{sensor_index}-{pump_index}">Soil Moisture Threshold ({self._soil_unit_for_sensor(sensor_index)}):</label>
                     <input type="number" class="form-input" id="threshold-{sensor_index}-{pump_index}"
-                           name="threshold" step="0.1" min="0" max="100"
+                           name="threshold" step="0.1" min="0"
                            value="{system_data['threshold']:.1f}" required>
                 </div>
                 <div class="form-group">
@@ -922,21 +956,27 @@ class AgXRPWebDashboard:
                 html += """    </div>
 """
 
-        # Add JavaScript for dynamic sensor updates
-        html += """
+        # Embed soil moisture units as a JS variable so formatSensorValue can use them
+        html += f"""
     <script>
-        function formatSensorValue(sensorKey, value) {
-            if (value === null || value === undefined) {
-                return '<span class="no-data">No data</span>';
-            }
+        const SOIL_UNITS = {{
+            'soil_moisture_1': '{self._soil_moisture_1_unit}',
+            'soil_moisture_2': '{self._soil_moisture_2_unit}'
+        }};
 
-            switch(sensorKey) {
+        function formatSensorValue(sensorKey, value) {{
+            if (value === null || value === undefined) {{
+                return '<span class="no-data">No data</span>';
+            }}
+
+            switch(sensorKey) {{
                 case 'temperature':
                     return value.toFixed(1) + '&deg;C';
                 case 'humidity':
+                    return value.toFixed(1) + '%';
                 case 'soil_moisture_1':
                 case 'soil_moisture_2':
-                    return value.toFixed(1) + '%';
+                    return value.toFixed(1) + ' ' + (SOIL_UNITS[sensorKey] || '%');
                 case 'co2':
                     return value + ' ppm';
                 case 'light_intensity':
@@ -948,8 +988,8 @@ class AgXRPWebDashboard:
                     return Math.floor(value).toString();
                 default:
                     return value.toString();
-            }
-        }
+            }}
+        }}
 
         function updateSensorValues(data) {
             for (const [key, value] of Object.entries(data)) {
@@ -960,17 +1000,33 @@ class AgXRPWebDashboard:
             }
         }
 
+        let _lastUpdatedMs = null;
+
         async function fetchSensorData() {
             try {
                 const response = await fetch('/api/sensors');
                 if (response.ok) {
                     const data = await response.json();
+                    if (data._last_updated !== undefined) {
+                        _lastUpdatedMs = Date.now();
+                        delete data._last_updated;
+                    }
                     updateSensorValues(data);
                 }
             } catch (error) {
                 console.error('Error fetching sensor data:', error);
             }
         }
+
+        function updateLastUpdatedLabel() {
+            const el = document.getElementById('last-updated-label');
+            if (!el) return;
+            if (_lastUpdatedMs === null) { el.textContent = '-'; return; }
+            const sec = Math.round((Date.now() - _lastUpdatedMs) / 1000);
+            el.textContent = sec < 5 ? 'just now' : sec + 's ago';
+        }
+
+        setInterval(updateLastUpdatedLabel, 1000);
 
         setInterval(fetchSensorData, 2000);
         fetchSensorData();

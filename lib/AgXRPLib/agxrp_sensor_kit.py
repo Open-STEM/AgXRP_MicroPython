@@ -265,17 +265,18 @@ class AgXRPSensorKit:
         print("OLED display registered successfully")
         return True
     
-    def register_csv_logger(self, filename, period_ms):
+    def register_csv_logger(self, filename, period_ms, max_rows=0):
         """!
         Register the CSV logger.
-        
+
         @param filename: Name of the CSV file to write to
         @param period_ms: Logging period in milliseconds
+        @param max_rows: Max data rows before rotating to a .bak file (0 = unlimited)
         @return **bool** True if registration was successful, False otherwise
         """
         print(f"Registering CSV logger (file: {filename}, period: {period_ms}ms)...")
-        
-        self._csv_logger = AgXRPCSVLogger(filename, period_ms)
+
+        self._csv_logger = AgXRPCSVLogger(filename, period_ms, max_rows=max_rows)
         
         # Set callback to collect data from all sensors
         def collect_sensor_data():
@@ -354,8 +355,18 @@ class AgXRPSensorKit:
                 
                 start_index = self._oled_current_page * lines_per_page
             
+            if total_lines <= lines_per_page:
+                total_pages_for_display = 1
+            else:
+                total_pages_for_display = (total_lines + lines_per_page - 1) // lines_per_page
+
             display_lines = all_lines[start_index:start_index + lines_per_page]
-            
+
+            # Reserve the last line for a page indicator when there are multiple pages
+            if total_pages_for_display > 1:
+                display_lines = display_lines[:lines_per_page - 1]
+                display_lines.append("Pg {}/{}".format(self._oled_current_page + 1, total_pages_for_display))
+
             for i, line in enumerate(display_lines):
                 self.screen.set_cursor(0, y_positions[i])
                 self.screen.print(line)

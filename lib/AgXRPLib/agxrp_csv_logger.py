@@ -28,20 +28,51 @@ class AgXRPCSVLogger:
     at specified intervals.
     """
     
-    def __init__(self, filename, period_ms):
+    def __init__(self, filename, period_ms, max_rows=0):
         """!
         Constructor
-        
+
         @param filename: Name of the CSV file to write to
         @param period_ms: Logging period in milliseconds
+        @param max_rows: Maximum number of data rows before rotating (0 = unlimited)
         """
         self._filename = filename
         self._period_ms = period_ms
+        self._max_rows = max_rows
+        self._row_count = self._count_existing_rows()
         self._timer = None
         self._header_written = False
         self._sensor_data_callback = None
         self._running = False
     
+    def _count_existing_rows(self):
+        """Count data rows in an existing CSV file (excluding header)."""
+        try:
+            count = 0
+            with open(self._filename, 'r') as f:
+                for _ in f:
+                    count += 1
+            return max(0, count - 1)  # subtract header row
+        except OSError:
+            return 0
+
+    def _rotate(self):
+        """Rename current log to .bak and start a fresh file."""
+        import os
+        try:
+            bak = self._filename + ".bak"
+            # Remove old backup if it exists
+            try:
+                os.remove(bak)
+            except OSError:
+                pass
+            os.rename(self._filename, bak)
+            print(f"CSV log rotated: {self._filename} -> {bak}")
+        except Exception as e:
+            print(f"Error rotating CSV log: {e}")
+        self._header_written = False
+        self._row_count = 0
+
     def set_sensor_data_callback(self, callback):
         """!
         Set the callback function to collect sensor data.
@@ -120,14 +151,19 @@ class AgXRPCSVLogger:
             data_dict = self._sensor_data_callback()
             
             if data_dict:
+                # Rotate if max_rows limit reached
+                if self._max_rows > 0 and self._row_count >= self._max_rows:
+                    self._rotate()
+
                 # Write header if not already written
                 if not self._header_written:
                     # Create fieldnames list: datetime + sorted sensor keys
                     fieldnames = ['datetime'] + sorted(data_dict.keys())
                     self._write_header(fieldnames)
-                
+
                 # Write data row
                 self._write_row(data_dict)
+                self._row_count += 1
         except Exception as e:
             print(f"Error in CSV logger callback: {e}")
     

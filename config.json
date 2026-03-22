@@ -1,4 +1,5 @@
 {
+  "config_version": 2,
   "use_random_data": false,
 
   "sensor_kit": {
@@ -43,7 +44,8 @@
     "csv_logger": {
       "enabled": false,
       "filename": "sensor_log.csv",
-      "period_ms": 5000
+      "period_ms": 5000,
+      "max_rows": 5000
     }
   },
 
@@ -53,12 +55,14 @@
       {
         "enabled": true,
         "pump_index": 1,
-        "csv_filename": "water_pump_1_log.csv"
+        "csv_filename": "water_pump_1_log.csv",
+        "max_duration_seconds": 60.0
       },
       {
         "enabled": true,
         "pump_index": 2,
-        "csv_filename": "water_pump_2_log.csv"
+        "csv_filename": "water_pump_2_log.csv",
+        "max_duration_seconds": 60.0
       }
     ],
     "plant_systems": [
@@ -68,6 +72,7 @@
         "pump_index": 1,
         "interval_hours": 0.5,
         "threshold": 300.0,
+        "hysteresis": 20.0,
         "duration_seconds": 3.0,
         "pump_effort": 1.0
       },
@@ -77,6 +82,7 @@
         "pump_index": 2,
         "interval_hours": 0.5,
         "threshold": 300.0,
+        "hysteresis": 20.0,
         "duration_seconds": 3.0,
         "pump_effort": 1.0
       }

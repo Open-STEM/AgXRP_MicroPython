@@ -41,7 +41,7 @@ class AgXRPController:
         """
         return self._sensor_kit
     
-    def register_water_pump(self, pump_index: int, csv_filename: str = None):
+    def register_water_pump(self, pump_index: int, csv_filename: str = None, max_duration_seconds: float = 60.0):
         """!
         Register a water pump for control.
         
@@ -58,7 +58,7 @@ class AgXRPController:
             if csv_filename is None:
                 csv_filename = f"water_pump_log_{pump_index}.csv"
             
-            pump = AgXRPWaterPump(index=pump_index, csv_filename=csv_filename)
+            pump = AgXRPWaterPump(index=pump_index, csv_filename=csv_filename, max_duration_seconds=max_duration_seconds)
             self._water_pumps[pump_index] = pump
             print(f"Water pump {pump_index} registered successfully")
             return True
@@ -79,7 +79,7 @@ class AgXRPController:
     def register_plant_system(self, sensor_index: int, pump_index: int,
                              interval_hours: float, threshold: float,
                              duration_seconds: float, enabled: bool = True,
-                             pump_effort: float = 1.0):
+                             pump_effort: float = 1.0, hysteresis: float = 0.0):
         """!
         Register a plant system (sensor + pump pair) for automatic control.
         
@@ -119,10 +119,12 @@ class AgXRPController:
             "pump_index": pump_index,
             "interval_hours": interval_hours,
             "threshold": threshold,
+            "hysteresis": max(0.0, float(hysteresis)),
             "duration_seconds": duration_seconds,
             "pump_effort": max(-1.0, min(1.0, float(pump_effort))),
             "enabled": enabled,
-            "last_check_time": time.time()
+            "last_check_time": time.time(),
+            "watering_needed": False  # hysteresis state flag
         }
         
         print(f"Plant system registered: Sensor {sensor_index} -> Pump {pump_index} "
@@ -158,6 +160,8 @@ class AgXRPController:
             system["duration_seconds"] = float(kwargs["duration_seconds"])
         if "pump_effort" in kwargs:
             system["pump_effort"] = max(-1.0, min(1.0, float(kwargs["pump_effort"])))
+        if "hysteresis" in kwargs:
+            system["hysteresis"] = max(0.0, float(kwargs["hysteresis"]))
         if "enabled" in kwargs:
             system["enabled"] = bool(kwargs["enabled"])
         
@@ -221,8 +225,17 @@ class AgXRPController:
                             print(f"Control check: Sensor {sensor_index} -> Pump {pump_index}: "
                                   f"Moisture = {moisture:.1f} {unit}, Threshold = {system['threshold']:.1f} {unit}")
                             
-                            # Check if watering is needed
+                            # Hysteresis: start watering when below threshold,
+                            # stop triggering again until moisture recovers above
+                            # threshold + hysteresis.
+                            hysteresis = system.get("hysteresis", 0.0)
                             if moisture < system["threshold"]:
+                                system["watering_needed"] = True
+                            elif moisture >= system["threshold"] + hysteresis:
+                                system["watering_needed"] = False
+
+                            # Check if watering is needed
+                            if system["watering_needed"]:
                                 print(f"Watering needed! Activating Pump {pump_index} for {system['duration_seconds']}s")
                                 
                                 # Get pump and activate it
@@ -287,6 +300,19 @@ class AgXRPController:
             except:
                 pass
             self._control_loop_task = None
-        
+
         print("Control loop stopped")
+
+    def stop_all_pumps(self):
+        """!
+        Immediately stop all registered pumps.
+
+        Call this before rebooting or shutting down to ensure no pump is left running.
+        """
+        for pump_index, pump in self._water_pumps.items():
+            try:
+                pump.stop_pump()
+                print(f"Pump {pump_index} stopped")
+            except Exception as e:
+                print(f"ERROR: Failed to stop pump {pump_index}: {e}")
 

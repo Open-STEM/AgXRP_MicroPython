@@ -16,10 +16,16 @@ from lib.AgXRPLib.agxrp_web_data_viewer import AgXRPWebDataViewer
 from lib.AgXRPLib.agxrp_controller import AgXRPController
 
 
+CONFIG_VERSION = 2
+
 def load_config(path="config.json"):
     """Load configuration from JSON file."""
     with open(path, "r") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    version = cfg.get("config_version", 1)
+    if version < CONFIG_VERSION:
+        print(f"WARNING: config.json version {version} is older than expected {CONFIG_VERSION}. Some settings may use defaults.")
+    return cfg
 
 
 def setup_sensors(agxrp, cfg):
@@ -65,7 +71,8 @@ def setup_sensors(agxrp, cfg):
     if csv_cfg.get("enabled", False):
         agxrp.register_csv_logger(
             csv_cfg.get("filename", "sensor_log.csv"),
-            csv_cfg.get("period_ms", 5000)
+            csv_cfg.get("period_ms", 5000),
+            max_rows=csv_cfg.get("max_rows", 0)
         )
 
 
@@ -83,7 +90,8 @@ def setup_controller(agxrp, cfg):
             continue
         controller.register_water_pump(
             pump_cfg["pump_index"],
-            csv_filename=pump_cfg.get("csv_filename")
+            csv_filename=pump_cfg.get("csv_filename"),
+            max_duration_seconds=pump_cfg.get("max_duration_seconds", 60.0)
         )
 
     # Register plant systems
@@ -97,7 +105,8 @@ def setup_controller(agxrp, cfg):
             threshold=ps_cfg["threshold"],
             duration_seconds=ps_cfg["duration_seconds"],
             enabled=ps_cfg.get("enabled", True),
-            pump_effort=ps_cfg.get("pump_effort", 1.0)
+            pump_effort=ps_cfg.get("pump_effort", 1.0),
+            hysteresis=ps_cfg.get("hysteresis", 0.0)
         )
 
     controller.start_control_loop()
@@ -135,7 +144,7 @@ def setup_webserver_display(dashboard, cfg):
         if soil_cfg.get("enabled", False):
             register_fn = soil_register.get(soil_cfg["sensor_index"])
             if register_fn:
-                register_fn()
+                register_fn(sensor_type=soil_cfg.get("type", "capacitive"))
 
 
 def main():
@@ -177,7 +186,7 @@ def main():
     setup_webserver_display(dashboard, cfg)
 
     # Register configuration and data viewer routes (must be before dashboard's catchall)
-    configurator = AgXRPWebConfigure(config_path="config.json")
+    configurator = AgXRPWebConfigure(config_path="config.json", controller=controller)
     configurator.register_routes()
 
     data_viewer = AgXRPWebDataViewer(config_path="config.json")

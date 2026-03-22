@@ -109,7 +109,9 @@ class AgXRPWebDataViewer:
     def _handle_download(self, request):
         """Serve a CSV file for download."""
         filename = request.query.get("file", "")
-        if not filename or not self._file_exists(filename):
+        # Validate against the known list of CSV files to prevent path traversal
+        allowed = [fn for _, fn in self._get_csv_files()]
+        if not filename or filename not in allowed:
             return "File not found", 404, "text/plain"
 
         return server.FileResponse(filename)

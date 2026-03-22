@@ -81,7 +81,7 @@ class AgXRPResistiveSoilSensor(AgXRPSensor):
     def _moisture_percent(self):
         """Convert raw 0-1023 to percentage 0-100 (0=dry, 100=wet)."""
         p = round((self._moisture_raw / _RAW_MAX) * 100)
-        return 100 - max(0, min(100, p))
+        return max(0, min(100, p))
 
     def get_display_lines(self):
         """!

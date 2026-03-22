@@ -25,13 +25,16 @@ class AgXRPWebConfigure:
     MAX_PUMPS = 4
     MAX_PLANT_SYSTEMS = 4
 
-    def __init__(self, config_path="config.json"):
+    def __init__(self, config_path="config.json", controller=None):
         """!
         Constructor.
 
         @param config_path  Path to the JSON configuration file.
+        @param controller   Optional AgXRPController instance used to stop pumps
+                            before rebooting.
         """
         self._config_path = config_path
+        self._controller = controller
 
     # ------------------------------------------------------------------
     # Route registration
@@ -61,12 +64,18 @@ class AgXRPWebConfigure:
 
     def _save_config(self, cfg):
         """!
-        Write a Python dict to config.json.
+        Write a Python dict to config.json atomically.
+
+        Writes to a temp file first, then renames to avoid corruption on
+        power loss mid-write.
 
         @param cfg  The configuration dictionary to persist.
         """
-        with open(self._config_path, "w") as f:
+        import os
+        tmp_path = self._config_path + ".tmp"
+        with open(tmp_path, "w") as f:
             json.dump(cfg, f)
+        os.rename(tmp_path, self._config_path)
 
     # ------------------------------------------------------------------
     # Route handlers
@@ -86,7 +95,12 @@ class AgXRPWebConfigure:
         return (html, 200, "text/html")
 
     def _handle_reboot(self, request):
-        """POST /configure/reboot — reboot the device."""
+        """POST /configure/reboot — stop pumps then reboot the device."""
+        if self._controller is not None:
+            try:
+                self._controller.stop_all_pumps()
+            except Exception as e:
+                print(f"Error stopping pumps before reboot: {e}")
         import machine
         machine.reset()
 
@@ -135,7 +149,8 @@ class AgXRPWebConfigure:
         existing = self._load_config()
         cfg = {}
 
-        # Preserve use_random_data from existing config (not editable in UI)
+        # Preserve non-editable fields from existing config
+        cfg["config_version"] = existing.get("config_version", 1)
         cfg["use_random_data"] = existing.get("use_random_data", False)
 
         # Sensor kit / I2C — preserve i2c_freq from existing config
@@ -189,6 +204,7 @@ class AgXRPWebConfigure:
             "enabled": self._form_bool(form, "csv_enabled"),
             "filename": self._form_str(form, "csv_filename", "sensor_log.csv"),
             "period_ms": self._form_int(form, "csv_period_ms", 5000),
+            "max_rows": self._form_int(form, "csv_max_rows", 5000),
         }
 
         cfg["sensors"] = sensors
@@ -208,6 +224,7 @@ class AgXRPWebConfigure:
                 "enabled": self._form_bool(form, key),
                 "pump_index": self._form_int(form, "pump_{}_pump_index".format(i), i + 1),
                 "csv_filename": self._form_str(form, "pump_{}_csv_filename".format(i)),
+                "max_duration_seconds": self._form_float(form, "pump_{}_max_duration_seconds".format(i), 60.0),
             })
         controller["pumps"] = pumps_list
 
@@ -223,6 +240,7 @@ class AgXRPWebConfigure:
                 "pump_index": self._form_int(form, "ps_{}_pump_index".format(i), 1),
                 "interval_hours": self._form_float(form, "ps_{}_interval_hours".format(i), 0.5),
                 "threshold": self._form_float(form, "ps_{}_threshold".format(i), 300.0),
+                "hysteresis": self._form_float(form, "ps_{}_hysteresis".format(i), 0.0),
                 "duration_seconds": self._form_float(form, "ps_{}_duration_seconds".format(i), 3.0),
                 "pump_effort": self._form_float(form, "ps_{}_pump_effort".format(i), 1.0),
             })
@@ -491,6 +509,9 @@ class AgXRPWebConfigure:
                               s.get("filename", "sensor_log.csv"))
         h += self._number_field("csv_period_ms", "Period (ms)",
                                 s.get("period_ms", 5000))
+        h += self._number_field("csv_max_rows", "Max Rows (0 = unlimited)",
+                                s.get("max_rows", 5000),
+                                step="100", min_val="0")
         h += '</div>\n'
         return h
 
@@ -508,7 +529,8 @@ class AgXRPWebConfigure:
         for i in range(max(len(pumps), 1)):
             entry = pumps[i] if i < len(pumps) else {
                 "enabled": False, "pump_index": i + 1,
-                "csv_filename": "water_pump_{}_log.csv".format(i + 1)
+                "csv_filename": "water_pump_{}_log.csv".format(i + 1),
+                "max_duration_seconds": 60.0
             }
             prefix = "pump_{}".format(i)
             h += '<div class="sub-section"><h3>Pump {}</h3>\n'.format(i + 1)
@@ -519,6 +541,10 @@ class AgXRPWebConfigure:
                                     [("1", "1"), ("2", "2"), ("3", "3"), ("4", "4")])
             h += self._text_field("{}_csv_filename".format(prefix), "CSV Filename",
                                   entry.get("csv_filename", ""))
+            h += self._number_field("{}_max_duration_seconds".format(prefix),
+                                    "Max Duration (seconds)",
+                                    entry.get("max_duration_seconds", 60.0),
+                                    step="1", min_val="1", max_val="300")
             h += '</div>\n'
         h += '</div>\n'
         return h
@@ -529,8 +555,8 @@ class AgXRPWebConfigure:
         for i in range(max(len(ps), 1)):
             entry = ps[i] if i < len(ps) else {
                 "enabled": False, "sensor_index": 1, "pump_index": 1,
-                "interval_hours": 0.5, "threshold": 300.0, "duration_seconds": 3.0,
-                "pump_effort": 1.0
+                "interval_hours": 0.5, "threshold": 300.0, "hysteresis": 0.0,
+                "duration_seconds": 3.0, "pump_effort": 1.0
             }
             prefix = "ps_{}".format(i)
             h += '<div class="sub-section"><h3>Plant System {}</h3>\n'.format(i + 1)
@@ -548,6 +574,9 @@ class AgXRPWebConfigure:
                                     step="0.01", min_val="0.01")
             h += self._number_field("{}_threshold".format(prefix), "Threshold",
                                     entry.get("threshold", 300.0))
+            h += self._number_field("{}_hysteresis".format(prefix), "Hysteresis",
+                                    entry.get("hysteresis", 0.0),
+                                    step="0.1", min_val="0")
             h += self._number_field("{}_duration_seconds".format(prefix),
                                     "Duration (seconds)",
                                     entry.get("duration_seconds", 3.0))
