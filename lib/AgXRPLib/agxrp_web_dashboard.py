@@ -990,7 +990,7 @@ class AgXRPWebDashboard:
                     return value.toString();
             }}
         }}
-
+""" + """
         function updateSensorValues(data) {
             for (const [key, value] of Object.entries(data)) {
                 const element = document.querySelector('[data-sensor="' + key + '"]');
