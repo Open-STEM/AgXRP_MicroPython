@@ -74,9 +74,10 @@ def setup_sensors(agxrp, cfg):
     # CSV logger
     csv_cfg = sensors_cfg.get("csv_logger", {})
     if csv_cfg.get("enabled", False):
+        period_ms = int(csv_cfg.get("period_hours", 1.0) * 3600000)
         agxrp.register_csv_logger(
             csv_cfg.get("filename", "sensor_log.csv"),
-            csv_cfg.get("period_ms", 5000),
+            period_ms,
             max_rows=csv_cfg.get("max_rows", 0)
         )
 
@@ -89,23 +90,23 @@ def setup_controller(agxrp, cfg):
 
     controller = AgXRPController(agxrp)
 
-    # Register pumps
-    for pump_cfg in ctrl_cfg.get("pumps", []):
+    # Register pumps — pump_index is fixed by array position (Motor L=1, Motor R=2, Motor 3=3, Motor 4=4)
+    for i, pump_cfg in enumerate(ctrl_cfg.get("pumps", [])):
         if not pump_cfg.get("enabled", True):
             continue
         controller.register_water_pump(
-            pump_cfg["pump_index"],
+            i + 1,
             csv_filename=pump_cfg.get("csv_filename"),
             max_duration_seconds=pump_cfg.get("max_duration_seconds", 60.0)
         )
 
-    # Register plant systems
-    for ps_cfg in ctrl_cfg.get("plant_systems", []):
+    # Register plant systems — pump_index is fixed by array position
+    for i, ps_cfg in enumerate(ctrl_cfg.get("plant_systems", [])):
         if not ps_cfg.get("enabled", False):
             continue
         controller.register_plant_system(
             sensor_index=ps_cfg["sensor_index"],
-            pump_index=ps_cfg["pump_index"],
+            pump_index=i + 1,
             interval_hours=ps_cfg.get("interval_hours", ps_cfg.get("interval_minutes", 30.0) / 60.0),
             threshold=ps_cfg["threshold"],
             duration_seconds=ps_cfg["duration_seconds"],

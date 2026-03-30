@@ -203,7 +203,7 @@ class AgXRPWebConfigure:
         sensors["csv_logger"] = {
             "enabled": self._form_bool(form, "csv_enabled"),
             "filename": self._form_str(form, "csv_filename", "sensor_log.csv"),
-            "period_ms": self._form_int(form, "csv_period_ms", 5000),
+            "period_hours": self._form_float(form, "csv_period_hours", 1.0),
             "max_rows": self._form_int(form, "csv_max_rows", 5000),
         }
 
@@ -214,7 +214,7 @@ class AgXRPWebConfigure:
             "enabled": self._form_bool(form, "controller_enabled"),
         }
 
-        # Pumps
+        # Pumps — pump_index is fixed by array position (0=Motor L, 1=Motor R, 2=Motor 3, 3=Motor 4)
         pumps_list = []
         for i in range(self.MAX_PUMPS):
             key = "pump_{}_enabled".format(i)
@@ -222,13 +222,12 @@ class AgXRPWebConfigure:
                 break
             pumps_list.append({
                 "enabled": self._form_bool(form, key),
-                "pump_index": self._form_int(form, "pump_{}_pump_index".format(i), i + 1),
                 "csv_filename": self._form_str(form, "pump_{}_csv_filename".format(i)),
                 "max_duration_seconds": self._form_float(form, "pump_{}_max_duration_seconds".format(i), 60.0),
             })
         controller["pumps"] = pumps_list
 
-        # Plant systems
+        # Plant systems — pump_index is fixed by array position (system 1 -> pump 1, etc.)
         ps_list = []
         for i in range(self.MAX_PLANT_SYSTEMS):
             key = "ps_{}_enabled".format(i)
@@ -237,7 +236,6 @@ class AgXRPWebConfigure:
             ps_list.append({
                 "enabled": self._form_bool(form, key),
                 "sensor_index": self._form_int(form, "ps_{}_sensor_index".format(i), 1),
-                "pump_index": self._form_int(form, "ps_{}_pump_index".format(i), 1),
                 "interval_hours": self._form_float(form, "ps_{}_interval_hours".format(i), 0.5),
                 "threshold": self._form_float(form, "ps_{}_threshold".format(i), 300.0),
                 "hysteresis": self._form_float(form, "ps_{}_hysteresis".format(i), 0.0),
@@ -503,12 +501,13 @@ class AgXRPWebConfigure:
 
     def _section_csv_logger(self, cfg):
         s = cfg.get("sensors", {}).get("csv_logger", {})
-        h = '<div class="card"><h2>CSV Logger</h2>\n'
+        h = '<div class="card"><h2>Sensor CSV Logger</h2>\n'
         h += self._radio_field("csv_enabled", "Enabled", s.get("enabled", False))
         h += self._text_field("csv_filename", "Filename",
                               s.get("filename", "sensor_log.csv"))
-        h += self._number_field("csv_period_ms", "Period (ms)",
-                                s.get("period_ms", 5000))
+        h += self._number_field("csv_period_hours", "Period (hours)",
+                                s.get("period_hours", 1.0),
+                                step="0.01", min_val="0.01")
         h += self._number_field("csv_max_rows", "Max Rows (0 = unlimited)",
                                 s.get("max_rows", 5000),
                                 step="100", min_val="0")
@@ -523,22 +522,23 @@ class AgXRPWebConfigure:
         h += '</div>\n'
         return h
 
+    # Motor port labels — index matches pump array position (0-based)
+    _MOTOR_LABELS = ["Motor L", "Motor R", "Motor 3", "Motor 4"]
+
     def _section_pumps(self, cfg):
         pumps = cfg.get("controller", {}).get("pumps", [])
         h = '<div class="card"><h2>Pumps</h2>\n'
         for i in range(max(len(pumps), 1)):
             entry = pumps[i] if i < len(pumps) else {
-                "enabled": False, "pump_index": i + 1,
+                "enabled": False,
                 "csv_filename": "water_pump_{}_log.csv".format(i + 1),
                 "max_duration_seconds": 60.0
             }
             prefix = "pump_{}".format(i)
-            h += '<div class="sub-section"><h3>Pump {}</h3>\n'.format(i + 1)
+            motor_label = self._MOTOR_LABELS[i] if i < len(self._MOTOR_LABELS) else "Motor {}".format(i + 1)
+            h += '<div class="sub-section"><h3>{} (Pump {})</h3>\n'.format(motor_label, i + 1)
             h += self._radio_field("{}_enabled".format(prefix), "Enabled",
                                    entry.get("enabled", False))
-            h += self._select_field("{}_pump_index".format(prefix), "Pump Index",
-                                    str(entry.get("pump_index", i + 1)),
-                                    [("1", "1"), ("2", "2"), ("3", "3"), ("4", "4")])
             h += self._text_field("{}_csv_filename".format(prefix), "CSV Filename",
                                   entry.get("csv_filename", ""))
             h += self._number_field("{}_max_duration_seconds".format(prefix),
@@ -554,19 +554,18 @@ class AgXRPWebConfigure:
         h = '<div class="card"><h2>Plant Systems</h2>\n'
         for i in range(max(len(ps), 1)):
             entry = ps[i] if i < len(ps) else {
-                "enabled": False, "sensor_index": 1, "pump_index": 1,
+                "enabled": False, "sensor_index": 1,
                 "interval_hours": 0.5, "threshold": 300.0, "hysteresis": 0.0,
                 "duration_seconds": 3.0, "pump_effort": 1.0
             }
             prefix = "ps_{}".format(i)
-            h += '<div class="sub-section"><h3>Plant System {}</h3>\n'.format(i + 1)
+            motor_label = self._MOTOR_LABELS[i] if i < len(self._MOTOR_LABELS) else "Motor {}".format(i + 1)
+            h += '<div class="sub-section"><h3>Plant System {} &mdash; {} (Pump {})</h3>\n'.format(
+                i + 1, motor_label, i + 1)
             h += self._radio_field("{}_enabled".format(prefix), "Enabled",
                                    entry.get("enabled", False))
-            h += self._select_field("{}_sensor_index".format(prefix), "Sensor Index",
+            h += self._select_field("{}_sensor_index".format(prefix), "Soil Sensor Index",
                                     str(entry.get("sensor_index", 1)),
-                                    [("1", "1"), ("2", "2"), ("3", "3"), ("4", "4")])
-            h += self._select_field("{}_pump_index".format(prefix), "Pump Index",
-                                    str(entry.get("pump_index", 1)),
                                     [("1", "1"), ("2", "2"), ("3", "3"), ("4", "4")])
             h += self._number_field("{}_interval_hours".format(prefix),
                                     "Interval (hours)",

@@ -58,11 +58,10 @@ class AgXRPWebDataViewer:
             fn = csv_cfg.get("filename", "sensor_log.csv")
             files.append(("Sensor Log", fn))
 
-        # Pump logs
-        for pump_cfg in cfg.get("controller", {}).get("pumps", []):
+        # Pump logs — pump_index is fixed by array position (Motor L=1, Motor R=2, etc.)
+        for i, pump_cfg in enumerate(cfg.get("controller", {}).get("pumps", [])):
             if pump_cfg.get("enabled", False) and pump_cfg.get("csv_filename"):
-                idx = pump_cfg.get("pump_index", "?")
-                files.append((f"Water Pump {idx} Log", pump_cfg["csv_filename"]))
+                files.append(("Water Pump {} Log".format(i + 1), pump_cfg["csv_filename"]))
 
         return files
 
