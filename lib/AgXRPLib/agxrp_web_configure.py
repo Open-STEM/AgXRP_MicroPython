@@ -736,6 +736,7 @@ class AgXRPWebConfigure:
         <p class="msg">Configuration saved successfully.</p>
         <form method="POST" action="/configure/reboot" style="display:inline;"
               onsubmit="return confirm('Are you sure you want to reboot the device?');">
+            <input type="hidden" name="action" value="reboot">
             <button type="submit" class="btn btn-reboot">Reboot to Apply Changes</button>
         </form>
         <a href="/configure" class="btn btn-back">Back to Settings</a>
